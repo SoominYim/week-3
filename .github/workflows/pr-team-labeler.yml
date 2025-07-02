@@ -1,0 +1,120 @@
+name: Auto Label by Team Member
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Add team labels based on member name in PR title
+        uses: actions/github-script@v7
+        env:
+          TEAM_INFO: ${{ secrets.TEAM_INFO }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Organization Secret에서 팀 정보 가져오기
+            const teamInfo = process.env.TEAM_INFO;
+
+            if (!teamInfo) {
+              console.log('TEAM_INFO secret not found');
+              return;
+            }
+
+            let teams;
+            try {
+              // JSON 형태로 파싱
+              teams = JSON.parse(teamInfo);
+            } catch (error) {
+              console.error('Error parsing TEAM_INFO secret:', error);
+              return;
+            }
+
+            // PR 타이틀 가져오기
+            const prTitle = context.payload.pull_request.title.toLowerCase();
+            console.log(`PR Title: ${prTitle}`);
+
+            // 붙일 라벨들을 저장할 Set (중복 방지)
+            const labelsToAdd = new Set();
+
+            // 각 팀의 멤버들을 확인
+            teamLoop: for (const [teamName, members] of Object.entries(teams)) {
+              // members가 문자열인 경우 배열로 변환
+              const memberArray = Array.isArray(members) ? members : members.toString().split(',').map(m => m.trim());
+              console.log(`Checking team: ${teamName}, members: ${memberArray.join(', ')}`);
+              
+              // 팀 멤버들의 이름이 PR 타이틀에 있는지 확인
+              for (const member of memberArray) {
+                if (member && member.trim()) {
+                  if (prTitle.includes(member.trim())) {
+                    labelsToAdd.add(teamName);
+                    console.log(`Found member: ${member} from team: ${teamName} -> adding label: ${teamName}`);
+                    break teamLoop; // 팀을 찾으면 모든 검사를 중단
+                  }
+                }
+              }
+            }
+
+            // 라벨 추가
+            if (labelsToAdd.size > 0) {
+              const labelsArray = Array.from(labelsToAdd);
+              console.log('Labels to add:', labelsArray);
+              
+              try {
+                // 팀별 색상 설정
+                const teamColors = {
+                  'TeamA': '0969da', // GitHub 파란색
+                  'TeamB': 'cf222e', // GitHub 빨간색
+                  'TeamC': '1a7f37', // GitHub 초록색
+                  'TeamD': '9a6700'  // GitHub 노란색
+                };
+
+                // 각 라벨에 대해 처리
+                for (const label of labelsArray) {
+                  console.log(`Processing label: ${label}`);
+                  try {
+                    // 라벨 생성 시도
+                    const color = teamColors[label] || 'db61a2';
+                    console.log(`Creating/updating label ${label} with color ${color}`);
+                    
+                    await github.rest.issues.createLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      name: label,
+                      color: color,
+                      description: `Team label for ${label}`
+                    });
+                    console.log(`Label created/updated: ${label}`);
+                  } catch (createError) {
+                    // 이미 존재하는 라벨이면 무시
+                    if (!createError.message.includes('already_exists')) {
+                      console.error(`Error with label ${label}:`, createError);
+                    } else {
+                      console.log(`Label ${label} already exists`);
+                    }
+                  }
+                }
+
+                // PR에 라벨 추가
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  labels: labelsArray
+                });
+                
+                console.log(`Successfully added labels: ${labelsArray.join(', ')}`);
+              } catch (error) {
+                console.error('Error in label operations:', error);
+                throw error;
+              }
+            } else {
+              console.log('No team member names found in PR title');
+            }
