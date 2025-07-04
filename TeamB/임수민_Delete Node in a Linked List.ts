@@ -50,11 +50,13 @@ node_3.next = node_4;
  * 간단하게 val, next만 삭제하면 될 줄 알았는데 오만이였습니다 허허
  * 애초에 {val,next:{val,next...}} 형식으로 이어져 있어서 삭제 한다면 node들도 통으로 삭제된다는걸 왜 몰랐을까 전 바보입니다
  */
-// const deleteNode_fail = (node: ListNode) => {
-//   Object.assign(node, node.next);
-// };
-// deleteNode_fail(node_2);
-// console.log("deleteNode_fail", JSON.stringify(node_1, null, 2));
+
+const deleteNode_fail = (node: ListNode) => {
+  delete (node as any).val;
+  delete (node as any).next;
+};
+deleteNode_fail(node_2);
+console.log("deleteNode_fail", JSON.stringify(node_1, null, 2));
 
 /**
  * 두 번째 시도
@@ -81,7 +83,8 @@ node_3.next = node_4;
 
 /**
  * 세 번째 시도
- * 배열 구조 분해 할당을 사용해서 치환을 해봤습니다
+ * 첫 번째로 배열 구조 분해 할당을 사용해서 치환을 해봤는데, 여전히 메모리가 낮은 것 같아
+ * 직접 원본을 수정하여 치환을 했습니다. 둘 다 출력 값은 동일합니다.
  * 출력 값
  * {
  *   "val": 4,
@@ -98,6 +101,11 @@ node_3.next = node_4;
 
 const deleteNode = (node: ListNode) => {
   [node.val, node.next] = [node.next!.val, node.next!.next];
+};
+
+const deleteNode_2 = (node: ListNode) => {
+  node.val = node.next!.val;
+  node.next = node.next!.next;
 };
 
 deleteNode(node_2);
